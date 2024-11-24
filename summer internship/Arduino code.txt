@@ -1,0 +1,132 @@
+#include <TimerOne.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <math.h>
+//Tamanho do buffer
+const int n = 100;
+//Buffer de binário 16 bits
+uint16_t d[n];
+//Buffer analógico e filtrado
+float a[n];
+float f[n];
+//Inicialização de indices
+int i = 0;
+int j = 0;
+int k = 0;
+//Inicialização variavel OFFSET
+float offset = 0;
+//Inicialização flag de envio de dados
+bool flag = false;
+//Inicialização coeficientes filtro
+float A[] = { 1,         -2.65247741,  0.66214634,  2.59580099,  0.24226609, -3.06708861, -0.14553671,  1.62620564,  0.32596455, -0.53334254, -0.15443221,  0.07297218, 0.02753774};
+float B[] = {0.16593348,  0,         -0.99560088, 0,          2.48900221,  0, -3.31866961,  0,          2.48900221,  0,         -0.99560088,  0,  0.16593348};
+//Função que converte um float numa representação de 16 bits (Valido para valores entre -1 e 1)
+uint16_t floatTofixed16(float e){
+  if (e >= -1 && e <= 1 ){
+    uint16_t s;
+    if(e >= 0){
+      s = (uint16_t)(e * 32767);
+    }
+    else{
+      s = (uint16_t) (abs(e) * 32767);
+      s = s + 0x8000;
+    }
+    return s;
+  }
+  return -1;
+}
+
+void setup(){
+  //Inicialização da baudrate 
+  Serial.begin(249600);
+  /*pinMode(12, OUTPUT);*/
+  //Ciclo que inicializa os buffers a zero
+  while (i<n){
+    a[i] = 0;
+    f[i] = 0;
+    i++;
+  }
+  //Inicialização do tempo de interrupção a 833 us por isso 1200hz
+  Timer1.initialize(833);
+  //Istrução de interrupção
+  Timer1.attachInterrupt([](){
+    //Enquanto o buffer não for completamente alterado, a flag true não é ativa e o buffer não é enviado
+    if(k<n){
+      //Lê valor da porta analógica
+      a[k] = ((analogRead(A2)*5.0)/1023) - offset;
+      /*a[k] += 0.0001;
+      d[k] = floatTofixed16(a[k]);*/
+      //Aplicação do filtro
+      //Nota: Estas condições todas são pelo fato de termos um buffer e os dados filtrados dependem do buffer anteriormente enviado.
+      if (k == 0){
+        f[k] = (- A[1]*f[99] - A[2]*f[98] - A[3]*f[97] - A[4]*f[96] - A[5]*f[95] - A[6]*f[94] - A[7]*f[93] - A[8]*f[92] - A[9]*f[91] - A[10]*f[90] - A[11]*f[89] - A[12]*f[88] + B[0]*a[k] + B[1]*a[99] + B[2]*a[98] + B[3]*a[97] + B[4]*a[96] + B[5]*a[95] + B[6]*a[94] + B[7]*a[93] + B[8]*a[92] + B[9]*a[91] + B[10]*a[90] + B[11]*a[89] + B[12]*a[88])/A[0];
+      }
+      else if(k == 1){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[99] - A[3]*f[98] - A[4]*f[97] - A[5]*f[96] - A[6]*f[95] - A[7]*f[94] - A[8]*f[93] - A[9]*f[92] - A[10]*f[91] - A[11]*f[90] - A[12]*f[89] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[99] + B[3]*a[98] + B[4]*a[97] + B[5]*a[96] + B[6]*a[95] + B[7]*a[94] + B[8]*a[93] + B[9]*a[92] + B[10]*a[91] + B[11]*a[90] + B[12]*a[89])/A[0];
+      }
+      else if(k == 2){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[99] - A[4]*f[98] - A[5]*f[97] - A[6]*f[96] - A[7]*f[95] - A[8]*f[94] - A[9]*f[93] - A[10]*f[92] - A[11]*f[91] - A[12]*f[90] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[99] + B[4]*a[98] + B[5]*a[97] + B[6]*a[96] + B[7]*a[95] + B[8]*a[94] + B[9]*a[93] + B[10]*a[92] + B[11]*a[91] + B[12]*a[90])/A[0];
+      }
+      else if(k == 3){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[99] - A[5]*f[98] - A[6]*f[97] - A[7]*f[96] - A[8]*f[95] - A[9]*f[94] - A[10]*f[93] - A[11]*f[92] - A[12]*f[91] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[99] + B[5]*a[98] + B[6]*a[97] + B[7]*a[96] + B[8]*a[95] + B[9]*a[94] + B[10]*a[93] + B[11]*a[92] + B[12]*a[91])/A[0];
+      }
+      else if(k == 4){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[99] - A[6]*f[98] - A[7]*f[97] - A[8]*f[96] - A[9]*f[95] - A[10]*f[94] - A[11]*f[93] - A[12]*f[92] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[99] + B[6]*a[98] + B[7]*a[97] + B[8]*a[96] + B[9]*a[95] + B[10]*a[94] + B[11]*a[93] + B[12]*a[92])/A[0];
+      }
+      else if(k == 5){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[99] - A[7]*f[98] - A[8]*f[97] - A[9]*f[96] - A[10]*f[95] - A[11]*f[94] - A[12]*f[93] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[99] + B[7]*a[98] + B[8]*a[97] + B[9]*a[96] + B[10]*a[95] + B[11]*a[94] + B[12]*a[93])/A[0];
+      }
+      else if(k == 6){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[99] - A[8]*f[98] - A[9]*f[97] - A[10]*f[96] - A[11]*f[95] - A[12]*f[94] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[99] + B[8]*a[98] + B[9]*a[97] + B[10]*a[96] + B[11]*a[95] + B[12]*a[94])/A[0];
+      }
+      else if(k == 7){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[k-7] - A[8]*f[99] - A[9]*f[98] - A[10]*f[97] - A[11]*f[96] - A[12]*f[95] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[k-7] + B[8]*a[99] + B[9]*a[98] + B[10]*a[97] + B[11]*a[96] + B[12]*a[95])/A[0];
+      }
+      else if(k == 8){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[k-7] - A[8]*f[k-8] - A[9]*f[99] - A[10]*f[98] - A[11]*f[97] - A[12]*f[96] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[k-7] + B[8]*a[k-8] + B[9]*a[99] + B[10]*a[98]+ B[11]*a[97] + B[12]*a[96])/A[0];
+      }
+      else if(k == 9){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[k-7] - A[8]*f[k-8] - A[9]*f[k-9] - A[10]*f[99] - A[11]*f[98] - A[12]*f[97] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[k-7] + B[8]*a[k-8] + B[9]*a[k-9] + B[10]*a[99] + B[11]*a[98] + B[12]*a[97])/A[0];
+      }
+      else if(k == 10){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[k-7] - A[8]*f[k-8] - A[9]*f[k-9] - A[10]*f[k-10] - A[11]*f[99] - A[12]*f[98] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[k-7] + B[8]*a[k-8] + B[9]*a[k-9] + B[10]*a[k-10] + B[11]*a[99] + B[12]*a[98])/A[0];
+      }
+      else if(k == 11){
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[k-7] - A[8]*f[k-8] - A[9]*f[k-9] - A[10]*f[k-10] - A[11]*f[k-11] - A[12]*f[99] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[k-7] + B[8]*a[k-8] + B[9]*a[k-9] + B[10]*a[k-10] + B[11]*a[k-11] + B[12]*a[99])/A[0];
+      }
+      else{
+        f[k] = (- A[1]*f[k-1] - A[2]*f[k-2] - A[3]*f[k-3] - A[4]*f[k-4] - A[5]*f[k-5] - A[6]*f[k-6] - A[7]*f[k-7] - A[8]*f[k-8] - A[9]*f[k-9] - A[10]*f[k-10] - A[11]*f[k-11] - A[12]*f[k-12] + B[0]*a[k] + B[1]*a[k-1] + B[2]*a[k-2] + B[3]*a[k-3] + B[4]*a[k-4] + B[5]*a[k-5] + B[6]*a[k-6] + B[7]*a[k-7] + B[8]*a[k-8] + B[9]*a[k-9] + B[10]*a[k-10] + B[11]*a[k-11] + B[12]*a[k-12])/A[0];
+      }
+      d[k] = floatTofixed16(f[k]);
+      /*Serial.println(a[k]);
+      Serial.println(f[k]);*/
+      k++;
+      if (k == n){
+      //Após ter preenchido o buffer o proximo indice a ser alterado é o zero
+      k = 0;
+      //Antes, a flag ativa para no loop fazer o envio do buffer
+      flag = true;
+      }
+    }
+  });
+}
+
+void loop(){
+  //Só faz algo quando a flag é ativada, ou seja, quando o buffer é completamente alterado
+  if(flag){
+      /*digitalWrite(12,!digitalRead(12));*/
+      j = 0;
+      //O comando USART_RECIVE, na STM, por prédefinição coloca um byte na inicialização, então é enviado um byte a mais para completar o elemento do vetor que será de tamanho n+1!
+      Serial.write((uint8_t)0x00);
+      while(j<n){ 
+        //Enviado o byte da direita, e  posteriormente com um shift e lógica o byte da esquerda
+        Serial.write((uint8_t)(d[j] & 0xff));
+        Serial.write((uint8_t)((d[j] & 0xff00) >> 8));
+        j++;
+      }
+      /*digitalWrite(12, !digitalRead(12));*/
+      //Flag desativada de modo a só entrar nesta condição quando alterar completamente o buffer
+      flag = false;
+  }
+}
