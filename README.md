@@ -13,13 +13,5 @@ Welcome! This repository is a collection of my personal projects, academic work,
 
 ---
 
-## 🛠️ Current Focus & Skills
-
-- **Languages:** Python, C, MATLAB.
-- **Interests:** AI & Game Development, Parallel Computing, and Simulation.
-- **Upcoming:** Currently exploring AI-driven strategic models and advanced logic implementations.
-
----
-
 > [!NOTE]  
 > This is a living repository. Some code is polished, while other parts are "quick and dirty" experiments—learning is the main goal here! ☕
