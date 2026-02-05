@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Tic-Tac-Toe RL</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --txt: #f8fafc; --blue: #38bdf8; --pink: #fb7185; }
+        body { font-family: 'Poppins', sans-serif; background: var(--bg); color: var(--txt); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; background: var(--card); color: var(--txt); border: 1px solid #334155; transition: 0.3s; }
+        .btn:hover { background: var(--blue); color: var(--bg); }
+        .board { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; background: var(--card); padding: 15px; border-radius: 15px; }
+        .cell { width: 100px; height: 100px; background: var(--bg); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .cell:hover { border: 2px solid var(--blue); }
+        .cell.x { color: var(--blue); }
+        .cell.o { color: var(--pink); }
+        .status { margin-top: 20px; font-size: 1.2rem; height: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Jogo do Galo IA</h1>
+    <div class="controls">
+        <button class="btn" onclick="startGame('human')">Eu começo</button>
+        <button class="btn" onclick="startGame('ai')">IA começa</button>
+    </div>
+    <div class="board" id="board">
+        <div class="cell" onclick="handleMove(0)" data-i="0"></div>
+        <div class="cell" onclick="handleMove(1)" data-i="1"></div>
+        <div class="cell" onclick="handleMove(2)" data-i="2"></div>
+        <div class="cell" onclick="handleMove(3)" data-i="3"></div>
+        <div class="cell" onclick="handleMove(4)" data-i="4"></div>
+        <div class="cell" onclick="handleMove(5)" data-i="5"></div>
+        <div class="cell" onclick="handleMove(6)" data-i="6"></div>
+        <div class="cell" onclick="handleMove(7)" data-i="7"></div>
+        <div class="cell" onclick="handleMove(8)" data-i="8"></div>
+    </div>
+    <div class="status" id="status">Escolhe quem começa</div>
+
+    <script>
+        let board = Array(9).fill(0);
+        let active = false;
+
+        async function startGame(who) {
+            board = Array(9).fill(0);
+            active = true;
+            document.querySelectorAll('.cell').forEach(c => { c.innerText = ''; c.className = 'cell'; });
+            document.getElementById('status').innerText = who === 'ai' ? "IA a pensar..." : "Tua vez!";
+            
+            if(who === 'ai') {
+                const res = await fetch('/play', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({board}) });
+                const data = await res.json();
+                makeMove(data.move, -1);
+            }
+        }
+
+        async function handleMove(i) {
+            if(!active || board[i] !== 0) return;
+            
+            // 1. Jogada do Humano
+            makeMove(i, 1);
+            
+            // 2. Verifica se o humano ganhou ou empatou antes de pedir à IA para jogar 
+            if(checkGameOver()) return; 
+
+            // 3. Só agora pede à IA para jogar
+            document.getElementById('status').innerText = "IA a pensar...";
+            const res = await fetch('/play', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({board}) 
+            });
+            const data = await res.json();
+            
+            if(data.move !== null) {
+                makeMove(data.move, -1);
+                checkGameOver();
+            }
+        }
+
+        function makeMove(i, p) {
+            board[i] = p; 
+            const el = document.querySelector(`[data-i="${i}"]`);
+            el.innerText = p === 1 ? 'X' : 'O';
+            el.classList.add(p === 1 ? 'x' : 'o');
+        }
+
+        function checkGameOver() {
+            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            for(let l of lines) {
+                if(board[l[0]] !== 0 && board[l[0]] === board[l[1]] && board[l[0]] === board[l[2]]) {
+                    document.getElementById('status').innerText = board[l[0]] === 1 ? "Ganhaste!" : "IA Venceu!";
+                    active = false; return true;
+                }
+            }
+            if(!board.includes(0)) { document.getElementById('status').innerText = "Empate!"; active = false; return true; }
+            document.getElementById('status').innerText = "Tua vez!";
+            return false;
+        }
+    </script>
+</body>
+</html>
