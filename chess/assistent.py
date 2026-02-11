@@ -13,7 +13,7 @@ from src.mcts import MCTS
 # --- CONFIGURAÇÕES ---
 MODEL_PATH = "models/supervised.pth" 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-SIMULATIONS = 400 # Igual ao app.py (ou ajusta para 50 se quiseres voar)
+SIMULATIONS = 1000 
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')

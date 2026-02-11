@@ -5,6 +5,34 @@ import numpy as np
 from src.board_encoding import encode_board
 from src.dataset import encode_move, decode_move
 
+# --- VALORES DAS PEÇAS (A "CABULA") ---
+PIECE_VALUES = {
+    chess.PAWN: 1,
+    chess.KNIGHT: 3,
+    chess.BISHOP: 3.2,
+    chess.ROOK: 5,
+    chess.QUEEN: 9,
+    chess.KING: 0 # O Rei vale infinito na prática, mas aqui é só material
+}
+
+def get_material_score(board):
+    """
+    Calcula quem tem mais peças no tabuleiro.
+    Retorna entre -1.0 (Pretas ganham) e 1.0 (Brancas ganham).
+    """
+    score = 0
+    for sq in chess.SQUARES:
+        piece = board.piece_at(sq)
+        if piece:
+            val = PIECE_VALUES.get(piece.piece_type, 0)
+            if piece.color == chess.WHITE:
+                score += val
+            else:
+                score -= val
+    
+    # Normalizar para ficar entre -1 e 1 (assumindo vantagem máx de 39 pontos)
+    return max(-1.0, min(1.0, score / 15.0))
+
 class MCTSNode:
     def __init__(self, parent=None, prior=0):
         self.parent = parent
@@ -25,7 +53,8 @@ class MCTSNode:
 
         for move_idx, child in self.children.items():
             # Q + U formula
-            q_value = -child.value()
+            q_value = -child.value() # Inverte a perspetiva (Minimax)
+            
             u_value = c_puct * child.prior * (math.sqrt(self.visit_count) / (1 + child.visit_count))
             score = q_value + u_value
 
@@ -47,18 +76,17 @@ class MCTS:
         
         best_move_idx = -1
         max_visits = -1
+        
+        # Escolhe a jogada mais visitada (a mais robusta)
         for move_idx, child in root.children.items():
             if child.visit_count > max_visits:
                 max_visits = child.visit_count
                 best_move_idx = move_idx
         
         if best_move_idx == -1:
-            # Fallback seguro
             return list(board.legal_moves)[0].uci(), 0.0
             
-        # Usa o helper com o board para garantir promoção correta
-        best_move_uci = decode_move(best_move_idx, board)
-        return best_move_uci, root.value()
+        return decode_move(best_move_idx, board), root.value()
 
     def search_return_root(self, board):
         return self.run_simulations(board)
@@ -74,7 +102,6 @@ class MCTS:
             # 1. Selection
             while len(node.children) > 0:
                 move_idx, node = node.select_child()
-                # Decoding inteligente
                 move_uci = decode_move(move_idx, scratch_board)
                 try:
                     scratch_board.push_uci(move_uci)
@@ -86,9 +113,8 @@ class MCTS:
             if not scratch_board.is_game_over():
                 value = self._expand(node, scratch_board)
             else:
-                # Tratamento de resultados
                 if scratch_board.is_checkmate():
-                    value = -1.0
+                    value = -1.0 # Derrota imediata para quem ia jogar
                 else:
                     value = 0.0 # Empate
 
@@ -105,11 +131,27 @@ class MCTS:
         board_tensor = torch.tensor(board_numpy, dtype=torch.float32).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            policy, value = self.model(board_tensor)
+            policy, nn_value = self.model(board_tensor)
         
-        val = value.item()
+        # --- A GRANDE MELHORIA (HYBRID EVALUATION) ---
+        # 1. Pega no valor que a Rede Neural "acha"
+        nn_val = nn_value.item()
+        
+        # 2. Calcula o valor REAL das peças (Material)
+        mat_val = get_material_score(board)
+        
+        # 3. Mistura os dois! (50% Inteligência Artificial + 50% Contagem de Peças)
+        # Isto impede a IA de fazer sacrifícios estúpidos se não souber o que está a fazer.
+        # --- AJUSTE DE PESOS ---
+        # 0.2 para a IA (estratégia) e 0.8 para Material (contagem de peças)
+        combined_value = (0.2 * nn_val) + (0.8 * mat_val)
+
+        # Ajusta a perspetiva (Se é vez das Pretas, inverte o sinal)
         if board.turn == chess.BLACK:
-            val = -val 
+            final_value = -combined_value
+        else:
+            final_value = combined_value
+        # ---------------------------------------------
 
         probs = torch.exp(policy).cpu().numpy()[0]
         legal_moves = list(board.legal_moves)
@@ -117,14 +159,12 @@ class MCTS:
         valid_children = {}
         
         for move in legal_moves:
-            # Usa a codificação simplificada (ignora 'q' extra)
             idx = encode_move(move.uci())
             if idx is not None:
                 prob = probs[idx]
                 policy_sum += prob
                 valid_children[idx] = prob
         
-        # Normaliza e cria filhos
         for idx, prob in valid_children.items():
             if policy_sum > 0:
                 norm_prob = prob / policy_sum
@@ -132,4 +172,4 @@ class MCTS:
                 norm_prob = 1.0 / len(legal_moves)
             node.children[idx] = MCTSNode(parent=node, prior=norm_prob)
             
-        return val
+        return final_value
