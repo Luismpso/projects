@@ -3,55 +3,43 @@ import numpy as np
 
 def encode_board(board):
     """
-    Converte um tabuleiro de xadrez (objeto python-chess) numa matriz numpy 
-    pronta para entrar numa Rede Neural (PyTorch).
-    
-    Output: Matriz de dimensão (12, 8, 8)
+    Input: Board object
+    Output: Matriz (17, 8, 8)
+    Canais 0-11: Peças (P,N,B,R,Q,K para Brancas e Pretas)
+    Canal 12: Vez de Jogar (1=Brancas, 0=Pretas)
+    Canais 13-16: Direitos de Roque (WK, WQ, BK, BQ)
     """
+    matrix = np.zeros((17, 8, 8), dtype=np.float32)
     
-    # Criamos uma matriz de zeros: 12 canais, 8 linhas, 8 colunas
-    # 12 canais = 6 tipos de peças brancas + 6 tipos de peças pretas
-    matrix = np.zeros((12, 8, 8), dtype=np.float32)
-    
-    # Dicionário para mapear peças aos canais da matriz
-    # P=Peão, N=Cavalo, B=Bispo, R=Torre, Q=Rainha, K=Rei
+    # --- 1. PEÇAS (Canais 0-11) ---
     piece_to_channel = {
-        'P': 0, 'N': 1, 'B': 2, 'R': 3, 'Q': 4, 'K': 5,  # Brancas
-        'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11 # Pretas
+        'P': 0, 'N': 1, 'B': 2, 'R': 3, 'Q': 4, 'K': 5,
+        'p': 6, 'n': 7, 'b': 8, 'r': 9, 'q': 10, 'k': 11
     }
     
-    # Percorrer as 64 casas do tabuleiro
     for square in chess.SQUARES:
         piece = board.piece_at(square)
-        
         if piece:
-            # Pega no símbolo da peça (ex: 'P' ou 'k')
-            symbol = piece.symbol()
-            
-            # Descobre qual é o canal correto para esta peça
-            channel = piece_to_channel[symbol]
-            
-            # O python-chess usa 0-63 linear, precisamos converter para linha/coluna (8x8)
-            # divmod devolve (linha, coluna)
+            channel = piece_to_channel[piece.symbol()]
             row, col = divmod(square, 8)
-            
-            # Colocamos um "1" na posição onde a peça está
             matrix[channel, row, col] = 1.0
 
-    return matrix
+    # --- 2. VEZ DE JOGAR (Canal 12) ---
+    if board.turn == chess.WHITE:
+        matrix[12, :, :] = 1.0
 
-# Bloco de teste
-if __name__ == "__main__":
-    # 1. Cria um tabuleiro na posição inicial
-    board = chess.Board()
-    print("Tabuleiro Original:")
-    print(board)
-    
-    # 2. Converte para números
-    encoded = encode_board(board)
-    
-    print("\nDimensão da Matriz:", encoded.shape) # Deve ser (12, 8, 8)
-    
-    # 3. Vamos ver o Canal 0 (Peões Brancos)
-    print("\nCanal 0 (Onde estão os Peões Brancos?):")
-    print(encoded[0])
+    # --- 3. DIREITOS DE ROQUE (Canais 13-16) ---
+    # Brancas Rei
+    if board.has_kingside_castling_rights(chess.WHITE):
+        matrix[13, :, :] = 1.0
+    # Brancas Rainha
+    if board.has_queenside_castling_rights(chess.WHITE):
+        matrix[14, :, :] = 1.0
+    # Pretas Rei
+    if board.has_kingside_castling_rights(chess.BLACK):
+        matrix[15, :, :] = 1.0
+    # Pretas Rainha
+    if board.has_queenside_castling_rights(chess.BLACK):
+        matrix[16, :, :] = 1.0
+
+    return matrix

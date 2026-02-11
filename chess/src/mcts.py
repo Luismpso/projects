@@ -24,9 +24,8 @@ class MCTSNode:
         best_move_idx = -1
 
         for move_idx, child in self.children.items():
-            # Importante: A perspetiva inverte a cada nível da árvore
+            # Q + U formula
             q_value = -child.value()
-            
             u_value = c_puct * child.prior * (math.sqrt(self.visit_count) / (1 + child.visit_count))
             score = q_value + u_value
 
@@ -44,25 +43,28 @@ class MCTS:
         self.num_simulations = num_simulations
 
     def search(self, board):
-        # Para jogar (devolve apenas a melhor jogada)
         root = self.run_simulations(board)
+        
         best_move_idx = -1
         max_visits = -1
         for move_idx, child in root.children.items():
             if child.visit_count > max_visits:
                 max_visits = child.visit_count
                 best_move_idx = move_idx
+        
         if best_move_idx == -1:
+            # Fallback seguro
             return list(board.legal_moves)[0].uci(), 0.0
-        return decode_move(best_move_idx), root.value()
+            
+        # Usa o helper com o board para garantir promoção correta
+        best_move_uci = decode_move(best_move_idx, board)
+        return best_move_uci, root.value()
 
     def search_return_root(self, board):
-        # Para análise (devolve a árvore toda)
         return self.run_simulations(board)
 
     def run_simulations(self, board):
         root = MCTSNode()
-        # Avalia a raiz (posição atual)
         self._expand(root, board)
 
         for _ in range(self.num_simulations):
@@ -72,21 +74,23 @@ class MCTS:
             # 1. Selection
             while len(node.children) > 0:
                 move_idx, node = node.select_child()
+                # Decoding inteligente
+                move_uci = decode_move(move_idx, scratch_board)
                 try:
-                    move = chess.Move.from_uci(decode_move(move_idx))
-                    scratch_board.push(move)
-                except: break # Evita erros raros
+                    scratch_board.push_uci(move_uci)
+                except:
+                    break 
             
             # 2. Expansion & Evaluation
             value = 0
             if not scratch_board.is_game_over():
                 value = self._expand(node, scratch_board)
             else:
-                # Se jogo acabou: Se levei mate é -1 (mau para quem ia jogar)
+                # Tratamento de resultados
                 if scratch_board.is_checkmate():
-                    value = -1.0 
+                    value = -1.0
                 else:
-                    value = 0.0
+                    value = 0.0 # Empate
 
             # 3. Backpropagation
             while node is not None:
@@ -103,13 +107,9 @@ class MCTS:
         with torch.no_grad():
             policy, value = self.model(board_tensor)
         
-        # --- A GRANDE CORREÇÃO ---
         val = value.item()
-        # Se for a vez das Pretas, inverte o valor!
-        # A rede diz: +1 (Brancas). Se sou preto, isso é -1 para mim.
         if board.turn == chess.BLACK:
             val = -val 
-        # -------------------------
 
         probs = torch.exp(policy).cpu().numpy()[0]
         legal_moves = list(board.legal_moves)
@@ -117,12 +117,14 @@ class MCTS:
         valid_children = {}
         
         for move in legal_moves:
+            # Usa a codificação simplificada (ignora 'q' extra)
             idx = encode_move(move.uci())
             if idx is not None:
                 prob = probs[idx]
                 policy_sum += prob
                 valid_children[idx] = prob
         
+        # Normaliza e cria filhos
         for idx, prob in valid_children.items():
             if policy_sum > 0:
                 norm_prob = prob / policy_sum

@@ -7,7 +7,7 @@ from src.mcts import MCTS
 app = Flask(__name__)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MODEL_PATH = "models/supervised.pth"
+MODEL_PATH = "models/reinforcement.pth"
 
 # Carregar Modelo
 print(f"A carregar IA no {DEVICE}...")
