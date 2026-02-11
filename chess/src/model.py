@@ -21,9 +21,9 @@ class ChessNet(nn.Module):
     def __init__(self, num_res_blocks=5): 
         super(ChessNet, self).__init__()
         
-        # --- VOLTAMOS PARA 12 CANAIS AQUI ---
+        # --- TEM DE SER 12 AQUI ---
         self.conv_input = nn.Conv2d(12, 64, kernel_size=3, padding=1)
-        # ------------------------------------
+        # --------------------------
         
         self.bn_input = nn.BatchNorm2d(64)
         
@@ -31,12 +31,10 @@ class ChessNet(nn.Module):
             *[ResidualBlock(64) for _ in range(num_res_blocks)]
         )
         
-        # Cabeça de Política (Policy Head)
         self.policy_conv = nn.Conv2d(64, 2, kernel_size=1)
         self.policy_bn = nn.BatchNorm2d(2)
         self.policy_fc = nn.Linear(2 * 8 * 8, 4096) 
 
-        # Cabeça de Valor (Value Head)
         self.value_conv = nn.Conv2d(64, 1, kernel_size=1)
         self.value_bn = nn.BatchNorm2d(1)
         self.value_fc1 = nn.Linear(8 * 8, 64)
